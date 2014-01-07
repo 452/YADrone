@@ -10,8 +10,10 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.swing.BorderFactory;
@@ -24,6 +26,7 @@ import javax.swing.JScrollPane;
 
 import org.reflections.Reflections;
 
+import de.yadrone.apps.controlcenter.CCPropertyManager;
 import de.yadrone.apps.controlcenter.ICCPlugin;
 import de.yadrone.base.IARDrone;
 
@@ -31,11 +34,22 @@ public class PluginManager extends JPanel implements ICCPlugin
 {
 	private IARDrone drone;
 	private JDesktopPane desktop;
+	private CCPropertyManager pluginProperties;
+	
+	/** This frame is used to get screen size and location upon initialization and finalization */
+	private Map<ICCPlugin, JInternalFrame> activePluginFrames;
 	
 	public PluginManager()
 	{
 		super(new GridBagLayout());
 		
+		pluginProperties = CCPropertyManager.getInstance();
+		
+		activePluginFrames = new HashMap<ICCPlugin, JInternalFrame>();
+	}
+
+	private void init()
+	{
 		JPanel contentPane = new JPanel(new GridBagLayout());
 		
 		// look for all classes implementing the Plugin interface
@@ -77,9 +91,9 @@ public class PluginManager extends JPanel implements ICCPlugin
 		contentPane.add(new JLabel(""), new GridBagConstraints(0,contentPane.getComponentCount(),1,1,1,1,GridBagConstraints.FIRST_LINE_START, GridBagConstraints.BOTH, new Insets(0,0,0,0), 0, 0));
 		
 		add(new JScrollPane(contentPane), new GridBagConstraints(0,0,1,1,1,1,GridBagConstraints.FIRST_LINE_START, GridBagConstraints.BOTH, new Insets(0,0,0,0), 0, 0));
-		
-	}
 
+	}
+	
 	private JPanel createPluginPanel(final ICCPlugin plugin)
 	{
 		final JButton button = new JButton("Activate");
@@ -103,17 +117,8 @@ public class PluginManager extends JPanel implements ICCPlugin
 						// visual plugins are added to the desktop pane
 						
 						frame = new JInternalFrame(plugin.getTitle(), true, false, true, true);
-					    frame.setSize(plugin.getScreenSize());
-					    frame.setLocation(plugin.getScreenLocation());
-					    frame.setContentPane(plugin.getPanel());
-					    frame.setVisible(true);
-					    
-						desktop.add(frame);
-						
-						// move frame to front and give focus 
-						frame.moveToFront();
-						frame.requestFocus();
-						desktop.setSelectedFrame(frame);
+					    initPluginInternalFrame(plugin, frame);
+					    activePluginFrames.put(plugin, frame);
 					}
 				}
 				else
@@ -125,6 +130,8 @@ public class PluginManager extends JPanel implements ICCPlugin
 					{
 						frame.setVisible(false);
 						desktop.remove(frame);
+						activePluginFrames.remove(plugin);
+						pluginProperties.setPluginAutoStart(plugin.getTitle(), false);
 					}
 				}
 				isStarted = !isStarted;
@@ -135,6 +142,10 @@ public class PluginManager extends JPanel implements ICCPlugin
 		panel.setBorder(BorderFactory.createTitledBorder(plugin.getTitle()));
 		panel.add(button, new GridBagConstraints(0,0,1,1,0,0,GridBagConstraints.FIRST_LINE_START, GridBagConstraints.NONE, new Insets(0,0,0,0), 0, 0));
 		panel.add(new JLabel("<html><i>" + plugin.getDescription() + "</i></html>"), new GridBagConstraints(1,0,1,1,1,0,GridBagConstraints.FIRST_LINE_START, GridBagConstraints.HORIZONTAL, new Insets(0,10,0,0), 0, 0));
+		
+		// start plugin if corresponding properties are set
+		if (pluginProperties.isPluginAutoStart(plugin.getTitle()))
+			button.doClick();
 		
 		return panel;
 	}
@@ -148,6 +159,22 @@ public class PluginManager extends JPanel implements ICCPlugin
 		return panel;
 	}
 	
+	private void initPluginInternalFrame(final ICCPlugin plugin, JInternalFrame frame)
+	{
+		// load properties and init frame
+		frame.setSize(pluginProperties.isPluginAutoStart(plugin.getTitle()) ? pluginProperties.getPluginScreenSize(plugin.getTitle()) : plugin.getScreenSize());
+	    frame.setLocation(pluginProperties.isPluginAutoStart(plugin.getTitle()) ? pluginProperties.getPluginScreenLocation(plugin.getTitle()) : plugin.getScreenLocation());
+	    frame.setContentPane(plugin.getPanel());
+	    frame.setVisible(true);
+	    
+		desktop.add(frame);
+		
+		// move frame to front and give focus 
+		frame.moveToFront();
+		frame.requestFocus();
+		desktop.setSelectedFrame(frame);
+	}
+	
 	public void setDesktop(JDesktopPane desktop)
 	{
 		this.desktop = desktop;
@@ -156,11 +183,20 @@ public class PluginManager extends JPanel implements ICCPlugin
 	public void activate(IARDrone drone)
 	{
 		this.drone = drone;
+		init();
 	}
 	
 	public void deactivate()
 	{
-		
+		// store all plugin properties
+		Iterator<ICCPlugin> plugins = activePluginFrames.keySet().iterator();
+		while (plugins.hasNext())
+		{
+			ICCPlugin plugin = plugins.next();
+			pluginProperties.setPluginAutoStart(plugin.getTitle(), true);
+			pluginProperties.setPluginScreenLocation(plugin.getTitle(), activePluginFrames.get(plugin).getLocation());
+			pluginProperties.setPluginScreenSize(plugin.getTitle(), activePluginFrames.get(plugin).getSize());
+		}
 	}
 
 	public String getTitle()
@@ -191,5 +227,5 @@ public class PluginManager extends JPanel implements ICCPlugin
 	public JPanel getPanel()
 	{
 		return this;
-	}	
+	}
 }

@@ -3,15 +3,23 @@ package de.yadrone.apps.controlcenter.plugins.keyboard;
 
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Image;
+import java.awt.Insets;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
 import java.awt.Point;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 
+import javax.swing.ButtonGroup;
 import javax.swing.ImageIcon;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 
+import de.yadrone.apps.controlcenter.CCPropertyManager;
 import de.yadrone.apps.controlcenter.ICCPlugin;
 import de.yadrone.base.IARDrone;
 
@@ -23,16 +31,61 @@ public class KeyboardLayoutPanel extends JPanel implements ICCPlugin
 	
 	private Image originalImage;
 	private Image scaledImage;
-	private int width = 0;
-    private int height = 0;
+	private int width;
+    private int height;
+    
+    private JRadioButton originalButton;;
+    private JRadioButton alternativeButton;;
+    
+    private IARDrone drone;
     
 	public KeyboardLayoutPanel()
 	{
-		ImageIcon icon = new ImageIcon(KeyboardLayoutPanel.class.getResource("keyboard_control.png"));
-		originalImage = icon.getImage();
-		scaledImage = originalImage;
+		loadImage(CCPropertyManager.getInstance().isKeyboardCommandManagerAlternative());
+		
+		originalButton = new JRadioButton("Original Layout");
+		originalButton.setOpaque(false);
+		originalButton.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e)
+			{
+				cmdManager = new KeyboardCommandManager(drone);
+				CCPropertyManager.getInstance().setKeyboardCommandManagerAlternative(false);
+				loadImage(CCPropertyManager.getInstance().isKeyboardCommandManagerAlternative());
+				repaint();
+			}
+		});
+		originalButton.setSelected(!CCPropertyManager.getInstance().isKeyboardCommandManagerAlternative());
+		
+		alternativeButton = new JRadioButton("Alternative WASD");
+		alternativeButton.setOpaque(false);
+		alternativeButton.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e)
+			{
+				cmdManager = new KeyboardCommandManagerAlternative(drone);
+				CCPropertyManager.getInstance().setKeyboardCommandManagerAlternative(true);
+				loadImage(CCPropertyManager.getInstance().isKeyboardCommandManagerAlternative());
+				repaint();
+			}
+		});
+		alternativeButton.setSelected(CCPropertyManager.getInstance().isKeyboardCommandManagerAlternative());
+		
+		ButtonGroup group = new ButtonGroup();
+		group.add(originalButton);
+		group.add(alternativeButton);
+		
+		setLayout(new GridBagLayout());
+		add(originalButton, new GridBagConstraints(0, 0, 1, 1, 0, 1, GridBagConstraints.FIRST_LINE_START, GridBagConstraints.NONE, new Insets(0,0,0,0), 0, 0));
+		add(alternativeButton, new GridBagConstraints(1, 0, 1, 1, 1, 1, GridBagConstraints.FIRST_LINE_START, GridBagConstraints.NONE, new Insets(0,0,0,0), 0, 0));
 	}
 	
+	private void loadImage(boolean isAlternative)
+	{
+		ImageIcon icon = new ImageIcon(KeyboardLayoutPanel.class.getResource("keyboard_control" + (isAlternative ? "_alternative" : "") + ".png"));
+		originalImage = icon.getImage();
+		scaledImage = originalImage;
+		width = 0;
+		height = 0;
+	}
 	
     public void paintComponent(Graphics g) 
     {
@@ -73,10 +126,15 @@ public class KeyboardLayoutPanel extends JPanel implements ICCPlugin
             return false;
 		}
 	};
-	
-    public void activate(IARDrone drone)
+
+	public void activate(IARDrone drone)
 	{
-		cmdManager = new KeyboardCommandManager(drone);
+    	this.drone = drone;
+    	
+    	if (CCPropertyManager.getInstance().isKeyboardCommandManagerAlternative())
+    		cmdManager = new KeyboardCommandManagerAlternative(drone);
+    	else
+    		cmdManager = new KeyboardCommandManager(drone);
 		
 		// CommandManager handles (keyboard) input and dispatches events to the drone		
 		System.out.println("KeyboardLayoutPanel: grab the whole keyboard input from now on ...");
@@ -109,7 +167,7 @@ public class KeyboardLayoutPanel extends JPanel implements ICCPlugin
 
 	public Dimension getScreenSize()
 	{
-		return new Dimension(400, 150);
+		return new Dimension(400, 180);
 	}
 	
 	public Point getScreenLocation()
